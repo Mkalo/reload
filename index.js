@@ -5,6 +5,15 @@ const path = require("path");
 module.exports = function Reload(dispatch) {
     const command = Command(dispatch);
 
+    const statePackets = ["S_LOGIN"];
+    const lastStates = {};
+
+    for (let packet of statePackets) {
+        dispatch.hook(packet, "raw", (code, data) => {
+            lastStates[code] = Buffer.from(data);
+        });
+    }
+
     function unloadCachedFiles(source) {
         if (fs.lstatSync(source).isDirectory()) {
             for (const file of fs.readdirSync(source)) {
@@ -51,6 +60,28 @@ module.exports = function Reload(dispatch) {
         dispatch.load(name, module);
 
         command.base.add = command_add;
+
+        if (dispatch.base.isLoaded(name)) {
+            for (let [code, data] of Object.entries(lastStates)) {
+                code = parseInt(code);
+                if (dispatch.base.hooks.has(code)) {
+                    for (let orderings of dispatch.base.hooks.get(code)) {
+                        for (let hook of orderings.hooks) {
+                            if (hook.moduleName == name) {
+                                try {
+                                    let event = data;
+                                    if (typeof hook.definitionVersion === 'number') {
+                                        event = dispatch.base.protocol.parse(dispatch.base.protocolVersion, code, hook.definitionVersion, data);
+                                    }
+                                    hook.callback(event);
+                                } catch (e) {
+                                    console.warn(`Failed to generate ${hook.name} packet to ${hook.moduleName}.`);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     });
 }
-	
