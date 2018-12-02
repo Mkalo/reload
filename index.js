@@ -1,9 +1,8 @@
-const Command = require('command');
 const fs = require("fs");
 const path = require("path");
 
 module.exports = function Reload(dispatch) {
-    const command = Command(dispatch);
+    const command = dispatch.command || dispatch.require.command;
 
     const statePackets = ["S_LOGIN"];
     const lastStates = {};
@@ -26,25 +25,7 @@ module.exports = function Reload(dispatch) {
         }
     }
 
-    command.add('reload', (name) => {
-        if (!name) {
-            command.message("Invalid argument, module name required.");
-            return;
-        }
-
-        if (!fs.existsSync(path.join(__dirname, "../", name))) {
-            command.message(`The module ${name} can't be found in your node_modules folder.`);
-            return;
-        }
-
-        if (!dispatch.base.isLoaded(name)) {
-            command.message(`The module ${name} is not loaded.`);
-        }
-
-
-        dispatch.unload(name);
-        unloadCachedFiles(path.join(__dirname, "../", name));
-
+    function loadModule(name) {
         const command_add = command.base.add;
 
         command.base.add = (cmd, ...args) => {
@@ -75,6 +56,7 @@ module.exports = function Reload(dispatch) {
                                     }
                                     hook.callback(event);
                                 } catch (e) {
+                                    command.message(`Failed to generate ${hook.name} packet to ${hook.moduleName}.`);
                                     console.warn(`Failed to generate ${hook.name} packet to ${hook.moduleName}.`);
                                 }
                             }
@@ -83,5 +65,78 @@ module.exports = function Reload(dispatch) {
                 }
             }
         }
+    }
+
+    command.add('reload', (name) => {
+        if (!name) {
+            command.message("Invalid argument, module name required.");
+            return;
+        }
+
+        if (!fs.existsSync(path.join(__dirname, "../", name))) {
+            command.message(`The module ${name} can't be found in your node_modules folder.`);
+            return;
+        }
+
+        if (!dispatch.base.isLoaded(name)) {
+            command.message(`The module ${name} is not loaded.`);
+            return;
+        }
+
+
+        dispatch.unload(name);
+        unloadCachedFiles(path.join(__dirname, "../", name));
+
+        try {
+            loadModule(name);
+            command.message(`Module ${name} reloaded.`);
+        } catch (e) {
+            command.message(`Error reloading module ${name}.`);
+        }
     });
+
+    command.add('load', (name) => {
+        if (!name) {
+            command.message("Invalid argument, module name required.");
+            return;
+        }
+
+        if (!fs.existsSync(path.join(__dirname, "../", name))) {
+            command.message(`The module ${name} can't be found in your node_modules folder.`);
+            return;
+        }
+
+        if (dispatch.base.isLoaded(name)) {
+            command.message(`The module ${name} is already loaded.`);
+            return;
+        }
+
+        try {
+            loadModule(name);
+            command.message(`Module ${name} loaded.`);
+        } catch (e) {
+            command.message(`Error loading module ${name}.`);
+        }
+    });
+
+    command.add('unload', (name) => {
+        if (!name) {
+            command.message("Invalid argument, module name required.");
+            return;
+        }
+
+        if (!fs.existsSync(path.join(__dirname, "../", name))) {
+            command.message(`The module ${name} can't be found in your node_modules folder.`);
+            return;
+        }
+
+        if (!dispatch.base.isLoaded(name)) {
+            command.message(`The module ${name} is not loaded.`);
+            return;
+        }
+
+        dispatch.unload(name);
+        unloadCachedFiles(path.join(__dirname, "../", name));
+        command.message(`Module ${name} unloaded.`);
+    })
 }
